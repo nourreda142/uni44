@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MyTimetable from "./pages/MyTimetable";
+import MyAvailability from "./pages/MyAvailability";
 import CoursesPage from "./pages/admin/CoursesPage";
 import InstructorsPage from "./pages/admin/InstructorsPage";
 import RoomsPage from "./pages/admin/RoomsPage";
@@ -84,6 +85,12 @@ function AppRoutes() {
       <Route path="/timetable" element={
         <ProtectedRoute allowedRoles={['staff', 'student']}>
           <MyTimetable />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/my-availability" element={
+        <ProtectedRoute allowedRoles={['staff']}>
+          <MyAvailability />
         </ProtectedRoute>
       } />
       
