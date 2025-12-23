@@ -65,6 +65,7 @@ function selectTimeSlotForInstructor(
 }
 
 // Generate random chromosome with availability preferences
+// Creates separate entries for Doctor (lectures per group) and TA (sections per section)
 function generateRandomChromosome(
   courses: Course[],
   sections: Section[],
@@ -74,23 +75,64 @@ function generateRandomChromosome(
 ): Chromosome {
   const genes: Gene[] = [];
 
-  // For each section, create a lecture entry for each course
+  // Get unique groups from sections
+  const groupsMap = new Map<string, Section[]>();
   for (const section of sections) {
-    for (const course of courses) {
-      const instructorId = course.doctorId || course.taId || '';
-      
-      // Select time slot based on instructor preference
-      const timeSlot = instructorId 
-        ? selectTimeSlotForInstructor(instructorId, timeSlots, availabilityMap)
-        : randomChoice(timeSlots);
-      
-      genes.push({
-        courseId: course.id,
-        instructorId,
-        sectionId: section.id,
-        roomId: randomChoice(rooms).id,
-        timeSlotId: timeSlot.id,
-      });
+    const groupId = section.groupId;
+    if (!groupsMap.has(groupId)) {
+      groupsMap.set(groupId, []);
+    }
+    groupsMap.get(groupId)!.push(section);
+  }
+
+  // For each course
+  for (const course of courses) {
+    // 1. Create LECTURE entries (Doctor teaches all sections in a group together)
+    if (course.doctorId) {
+      for (const [groupId, groupSections] of groupsMap) {
+        // Doctor gives one lecture to all sections in the group
+        // We pick the first section as representative (all sections attend)
+        const timeSlot = selectTimeSlotForInstructor(course.doctorId, timeSlots, availabilityMap);
+        
+        // Add one entry per section in the group (they all attend the same lecture)
+        for (const section of groupSections) {
+          genes.push({
+            courseId: course.id,
+            instructorId: course.doctorId,
+            sectionId: section.id,
+            roomId: randomChoice(rooms.filter(r => r.roomType === 'lecture_hall') || rooms).id,
+            timeSlotId: timeSlot.id,
+          });
+        }
+      }
+    }
+
+    // 2. Create SECTION entries (TA teaches each section separately)
+    if (course.taId) {
+      for (const section of sections) {
+        const timeSlot = selectTimeSlotForInstructor(course.taId, timeSlots, availabilityMap);
+        
+        genes.push({
+          courseId: course.id,
+          instructorId: course.taId,
+          sectionId: section.id,
+          roomId: randomChoice(rooms.filter(r => r.roomType === 'lab' || r.roomType === 'seminar_room') || rooms).id,
+          timeSlotId: timeSlot.id,
+        });
+      }
+    }
+
+    // Fallback: if no doctor or TA, create entry with doctor or empty
+    if (!course.doctorId && !course.taId) {
+      for (const section of sections) {
+        genes.push({
+          courseId: course.id,
+          instructorId: '',
+          sectionId: section.id,
+          roomId: randomChoice(rooms).id,
+          timeSlotId: randomChoice(timeSlots).id,
+        });
+      }
     }
   }
 
