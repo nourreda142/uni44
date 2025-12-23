@@ -108,6 +108,7 @@ export default function TimetableGrid({ entries, filterSection, filterInstructor
                             </div>
                             {entry.instructor && (
                               <div className="truncate text-[10px] mt-1 opacity-70">
+                                {entry.instructor.instructorType === 'teaching_assistant' ? '👨‍🏫 TA: ' : '👨‍⚕️ Dr. '}
                                 {entry.instructor.title} {entry.instructor.fullName}
                               </div>
                             )}
