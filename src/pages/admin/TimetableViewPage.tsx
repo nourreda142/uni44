@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,8 @@ import {
   Clock,
 } from 'lucide-react';
 import { Timetable, TimetableEntry, Course, Instructor, Section, Room, TimeSlot } from '@/lib/types';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export default function TimetableViewPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +26,9 @@ export default function TimetableViewPage() {
   const [timetable, setTimetable] = useState<Timetable | null>(null);
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
+  const timetableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (id) {
@@ -140,6 +144,52 @@ export default function TimetableViewPage() {
     }
   };
 
+  const handleExportPDF = async () => {
+    if (!timetableRef.current || !timetable) return;
+    
+    setExporting(true);
+    try {
+      const canvas = await html2canvas(timetableRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      });
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10;
+      
+      pdf.setFontSize(16);
+      pdf.text(timetable.name, pdfWidth / 2, 8, { align: 'center' });
+      
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      pdf.save(`${timetable.name.replace(/\s+/g, '_')}.pdf`);
+      
+      toast({ title: 'Success', description: 'PDF exported successfully' });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export PDF',
+        variant: 'destructive',
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -201,8 +251,12 @@ export default function TimetableViewPage() {
                 Approve
               </Button>
             )}
-            <Button variant="outline">
-              <FileDown className="w-4 h-4 mr-2" />
+            <Button variant="outline" onClick={handleExportPDF} disabled={exporting}>
+              {exporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4 mr-2" />
+              )}
               Export PDF
             </Button>
           </div>
@@ -220,7 +274,9 @@ export default function TimetableViewPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <TimetableGrid entries={entries} />
+            <div ref={timetableRef}>
+              <TimetableGrid entries={entries} />
+            </div>
           </CardContent>
         </Card>
       </div>
