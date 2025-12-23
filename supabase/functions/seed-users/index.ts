@@ -86,20 +86,83 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    // Create admin client for user creation
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
       },
     });
 
+    // Authentication check - require valid admin user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.log('Unauthorized: No authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - Admin authentication required' }), 
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify the token and check admin role
+    const token = authHeader.replace('Bearer ', '');
+    const supabaseAuth = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+    
+    if (userError || !user) {
+      console.log('Unauthorized: Invalid token', userError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - Invalid token' }), 
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if user is admin using the user_roles table
+    const { data: roleData, error: roleError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+
+    if (roleError || !roleData) {
+      console.log('Forbidden: User is not admin', roleError);
+      return new Response(
+        JSON.stringify({ error: 'Forbidden - Admin role required' }), 
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Admin authenticated:', user.email);
+
+    // Idempotency check - prevent re-seeding if demo users already exist
+    const { data: existingProfiles } = await supabaseAdmin
+      .from('profiles')
+      .select('user_code')
+      .in('user_code', users.map(u => u.userCode));
+
+    if (existingProfiles && existingProfiles.length > 0) {
+      console.log('Seed already completed - users exist');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Users already seeded',
+          existing: existingProfiles.map(p => p.user_code)
+        }), 
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const results: { user: string; status: string; error?: string }[] = [];
 
     // Fetch departments, groups, and sections for linking
-    const { data: departments } = await supabase.from('departments').select('id, code');
-    const { data: groups } = await supabase.from('groups').select('id, name, department_id');
-    const { data: sections } = await supabase.from('sections').select('id, name, group_id');
+    const { data: departments } = await supabaseAdmin.from('departments').select('id, code');
+    const { data: groups } = await supabaseAdmin.from('groups').select('id, name, department_id');
+    const { data: sections } = await supabaseAdmin.from('sections').select('id, name, group_id');
 
     console.log('Departments:', departments);
     console.log('Groups:', groups);
@@ -110,7 +173,7 @@ Deno.serve(async (req) => {
         console.log(`Creating user: ${userData.fullName} (${userData.email})`);
 
         // Create auth user
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: userData.email,
           password: userData.password,
           email_confirm: true,
@@ -126,7 +189,7 @@ Deno.serve(async (req) => {
         console.log(`Created auth user with ID: ${userId}`);
 
         // Create profile
-        const { error: profileError } = await supabase.from('profiles').insert({
+        const { error: profileError } = await supabaseAdmin.from('profiles').insert({
           user_id: userId,
           user_code: userData.userCode,
           full_name: userData.fullName,
@@ -140,7 +203,7 @@ Deno.serve(async (req) => {
         }
 
         // Create user_role entry
-        const { error: roleError } = await supabase.from('user_roles').insert({
+        const { error: roleError } = await supabaseAdmin.from('user_roles').insert({
           user_id: userId,
           role: userData.role,
         });
@@ -153,7 +216,7 @@ Deno.serve(async (req) => {
         if (userData.role === 'staff' && departments) {
           const dept = departments.find(d => d.code === userData.departmentCode);
           if (dept) {
-            const { error: instructorError } = await supabase.from('instructors').insert({
+            const { error: instructorError } = await supabaseAdmin.from('instructors').insert({
               user_id: userId,
               full_name: userData.fullName,
               instructor_type: userData.instructorType || 'doctor',
@@ -179,7 +242,7 @@ Deno.serve(async (req) => {
               sectionId = section?.id;
             }
 
-            const { error: studentError } = await supabase.from('students').insert({
+            const { error: studentError } = await supabaseAdmin.from('students').insert({
               user_id: userId,
               department_id: dept.id,
               group_id: group?.id,
