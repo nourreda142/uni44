@@ -16,9 +16,7 @@ import {
   Target,
   Clock,
 } from 'lucide-react';
-import { Timetable, TimetableEntry, Course, Instructor, Section, Room, TimeSlot } from '@/lib/types';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import type { Timetable, TimetableEntry } from '@/lib/types';
 
 export default function TimetableViewPage() {
   const { id } = useParams<{ id: string }>();
@@ -144,45 +142,37 @@ export default function TimetableViewPage() {
     }
   };
 
-  const handleExportPDF = async () => {
-    if (!timetableRef.current || !timetable) return;
+  const handleExportCSV = () => {
+    if (!timetable || entries.length === 0) return;
     
     setExporting(true);
     try {
-      const canvas = await html2canvas(timetableRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
+      const headers = ['Day', 'Time', 'Course', 'Instructor', 'Section', 'Room'];
+      const rows = entries.map(entry => [
+        entry.timeSlot?.day || '',
+        entry.timeSlot ? `${entry.timeSlot.startTime} - ${entry.timeSlot.endTime}` : '',
+        entry.course ? `${entry.course.code} - ${entry.course.name}` : '',
+        entry.instructor ? `${entry.instructor.title} ${entry.instructor.fullName}` : '',
+        entry.section?.name || '',
+        entry.room?.name || '',
+      ]);
       
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
-      });
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${cell}"`).join(','))
+        .join('\n');
       
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 10;
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${timetable.name.replace(/\s+/g, '_')}.csv`;
+      link.click();
       
-      pdf.setFontSize(16);
-      pdf.text(timetable.name, pdfWidth / 2, 8, { align: 'center' });
-      
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
-      pdf.save(`${timetable.name.replace(/\s+/g, '_')}.pdf`);
-      
-      toast({ title: 'Success', description: 'PDF exported successfully' });
+      toast({ title: 'Success', description: 'CSV exported successfully' });
     } catch (error) {
       console.error('Export error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to export PDF',
+        description: 'Failed to export CSV',
         variant: 'destructive',
       });
     } finally {
@@ -251,13 +241,13 @@ export default function TimetableViewPage() {
                 Approve
               </Button>
             )}
-            <Button variant="outline" onClick={handleExportPDF} disabled={exporting}>
+            <Button variant="outline" onClick={handleExportCSV} disabled={exporting}>
               {exporting ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <FileDown className="w-4 h-4 mr-2" />
               )}
-              Export PDF
+              Export CSV
             </Button>
           </div>
         </div>
