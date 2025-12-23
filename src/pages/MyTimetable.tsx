@@ -101,21 +101,14 @@ export default function MyTimetable() {
 
       // If staff, fetch their instructor record
       if (user.role === 'staff') {
-        console.log('Fetching instructor for staff user:', user.id, user.fullName);
-        
-        const { data: instructorData, error: instructorError } = await supabase
+        const { data: instructorData } = await supabase
           .from('instructors')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
 
-        console.log('Instructor query result:', instructorData, 'Error:', instructorError);
-
         if (instructorData) {
           setInstructorId(instructorData.id);
-          console.log('Set instructorId to:', instructorData.id);
-        } else {
-          console.log('No instructor record found for user:', user.id);
         }
       }
     } catch (error) {

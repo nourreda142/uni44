@@ -26,6 +26,11 @@ interface Stats {
   approvedTimetables: number;
 }
 
+interface UserDepartment {
+  name: string;
+  code: string;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState<Stats>({
@@ -36,15 +41,47 @@ export default function Dashboard() {
     timetables: 0,
     approvedTimetables: 0,
   });
+  const [userDepartment, setUserDepartment] = useState<UserDepartment | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user?.role === 'admin') {
       fetchStats();
+    } else if (user?.role === 'student' || user?.role === 'staff') {
+      fetchUserDepartment();
     } else {
       setLoading(false);
     }
   }, [user]);
+
+  const fetchUserDepartment = async () => {
+    if (!user) return;
+    try {
+      if (user.role === 'student') {
+        const { data } = await supabase
+          .from('students')
+          .select('department:departments(name, code)')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (data?.department) {
+          setUserDepartment(data.department as UserDepartment);
+        }
+      } else if (user.role === 'staff') {
+        const { data } = await supabase
+          .from('instructors')
+          .select('department:departments(name, code)')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (data?.department) {
+          setUserDepartment(data.department as UserDepartment);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching department:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -269,7 +306,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-muted-foreground">Department</span>
-                  <span className="font-medium">Artificial Intelligence</span>
+                  <span className="font-medium">{userDepartment?.name || 'Not assigned'}</span>
                 </div>
               </CardContent>
             </Card>
