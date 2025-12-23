@@ -86,13 +86,13 @@ export default function CoursesPage() {
             id: c.doctor.id,
             fullName: c.doctor.full_name,
             title: c.doctor.title,
-            instructorType: c.doctor.instructor_type,
+            instructorType: c.doctor.instructor_type as 'doctor' | 'teaching_assistant',
           } : undefined,
           ta: c.ta ? {
             id: c.ta.id,
             fullName: c.ta.full_name,
             title: c.ta.title,
-            instructorType: c.ta.instructor_type,
+            instructorType: c.ta.instructor_type as 'doctor' | 'teaching_assistant',
           } : undefined,
         })));
       }
