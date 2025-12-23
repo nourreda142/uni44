@@ -43,6 +43,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, roles: ['admin', 'staff', 'student'] },
   { href: '/timetable', label: 'My Timetable', icon: <Calendar className="w-5 h-5" />, roles: ['staff', 'student'] },
+  { href: '/my-availability', label: 'My Availability', icon: <Clock className="w-5 h-5" />, roles: ['staff'] },
   { href: '/admin/timetables', label: 'Timetables', icon: <Calendar className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/courses', label: 'Courses', icon: <BookOpen className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/instructors', label: 'Instructors', icon: <Users className="w-5 h-5" />, roles: ['admin'] },
