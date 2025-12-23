@@ -108,6 +108,8 @@ export default function MyTimetable() {
 
         if (instructorData) {
           setInstructorId(instructorData.id);
+        } else {
+          console.log('No instructor record found for user:', user.id);
         }
       }
     } catch (error) {
@@ -279,6 +281,18 @@ export default function MyTimetable() {
                 <h3 className="text-lg font-medium mb-2">No approved timetables</h3>
                 <p className="text-muted-foreground">
                   There are no approved timetables available yet. Please check back later.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : user?.role === 'staff' && !instructorId ? (
+          <Card>
+            <CardContent className="py-12">
+              <div className="text-center">
+                <AlertCircle className="w-12 h-12 mx-auto text-warning mb-4" />
+                <h3 className="text-lg font-medium mb-2">Instructor record not linked</h3>
+                <p className="text-muted-foreground">
+                  Your account is not linked to an instructor record. Please contact your administrator.
                 </p>
               </div>
             </CardContent>
