@@ -10,6 +10,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -34,19 +35,24 @@ import {
   Loader2,
   Search,
   Users,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface StudentProfile {
   id: string;
+  visibleId: string; // from students table
   userId: string;
   userCode: string;
   fullName: string;
+  email: string;
   sectionId: string | null;
   groupId: string | null;
   departmentId: string | null;
   sectionName?: string;
   groupName?: string;
+  departmentName?: string;
 }
 
 interface Section {
@@ -54,24 +60,46 @@ interface Section {
   name: string;
   groupId: string;
   groupName: string;
+  departmentId: string;
 }
 
 interface Group {
   id: string;
   name: string;
+  departmentId: string;
+}
+
+interface Department {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface StudentFormData {
+  fullName: string;
+  email: string;
+  userCode: string;
+  departmentId: string;
+  groupId: string;
+  sectionId: string;
 }
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
-  const [formData, setFormData] = useState({
-    sectionId: '',
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentProfile | null>(null);
+  const [formData, setFormData] = useState<StudentFormData>({
+    fullName: '',
+    email: '',
+    userCode: '',
+    departmentId: '',
     groupId: '',
+    sectionId: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
@@ -80,9 +108,25 @@ export default function StudentsPage() {
     fetchData();
   }, []);
 
+  // Filter groups based on selected department
+  const filteredGroups = formData.departmentId
+    ? groups.filter(g => g.departmentId === formData.departmentId)
+    : groups;
+
+  // Filter sections based on selected group
+  const filteredSections = formData.groupId
+    ? sections.filter(s => s.groupId === formData.groupId)
+    : [];
+
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Fetch departments
+      const { data: departmentsData } = await supabase
+        .from('departments')
+        .select('*')
+        .order('name');
+
       // Fetch all student profiles
       const { data: profilesData } = await supabase
         .from('profiles')
@@ -90,26 +134,35 @@ export default function StudentsPage() {
         .eq('role', 'student')
         .order('full_name');
 
-      // Fetch students table (links)
+      // Fetch students table with relations
       const { data: studentsData } = await supabase
         .from('students')
         .select(`
           *,
-          section:sections(id, name, group_id, group:groups(id, name)),
-          group:groups(id, name)
+          section:sections(id, name, group_id, group:groups(id, name, department_id)),
+          group:groups(id, name, department_id),
+          department:departments(id, name, code)
         `);
 
       // Fetch sections with groups
       const { data: sectionsData } = await supabase
         .from('sections')
-        .select('*, group:groups(id, name)')
+        .select('*, group:groups(id, name, department_id)')
         .order('name');
 
       // Fetch groups
       const { data: groupsData } = await supabase
         .from('groups')
-        .select('*')
+        .select('*, department:departments(id, name)')
         .order('name');
+
+      if (departmentsData) {
+        setDepartments(departmentsData.map(d => ({
+          id: d.id,
+          name: d.name,
+          code: d.code,
+        })));
+      }
 
       if (sectionsData) {
         setSections(sectionsData.map(s => ({
@@ -117,6 +170,7 @@ export default function StudentsPage() {
           name: s.name,
           groupId: s.group_id,
           groupName: s.group?.name || '',
+          departmentId: s.group?.department_id || '',
         })));
       }
 
@@ -124,6 +178,7 @@ export default function StudentsPage() {
         setGroups(groupsData.map(g => ({
           id: g.id,
           name: g.name,
+          departmentId: g.department_id,
         })));
       }
 
@@ -138,14 +193,17 @@ export default function StudentsPage() {
           const studentRecord = studentMap.get(p.user_id);
           return {
             id: p.id,
+            visibleId: studentRecord?.id || '',
             userId: p.user_id,
             userCode: p.user_code,
             fullName: p.full_name,
+            email: '', // Will be set from auth if needed
             sectionId: studentRecord?.section_id || null,
             groupId: studentRecord?.group_id || null,
             departmentId: studentRecord?.department_id || null,
             sectionName: studentRecord?.section?.name,
             groupName: studentRecord?.section?.group?.name || studentRecord?.group?.name,
+            departmentName: studentRecord?.department?.name,
           };
         }));
       }
@@ -161,57 +219,121 @@ export default function StudentsPage() {
     }
   };
 
-  const handleEdit = async () => {
-    if (!selectedStudent) return;
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSubmitting(true);
+
     try {
-      // Check if student record exists
-      const { data: existingStudent } = await supabase
-        .from('students')
-        .select('id')
-        .eq('user_id', selectedStudent.userId)
-        .maybeSingle();
-
-      const section = sections.find(s => s.id === formData.sectionId);
-
-      if (existingStudent) {
-        // Update existing
-        const { error } = await supabase
-          .from('students')
+      if (editingStudent) {
+        // Update existing student
+        const section = sections.find(s => s.id === formData.sectionId);
+        
+        // Update profile
+        const { error: profileError } = await supabase
+          .from('profiles')
           .update({
-            section_id: formData.sectionId || null,
-            group_id: section?.groupId || formData.groupId || null,
+            full_name: formData.fullName,
+            user_code: formData.userCode,
           })
-          .eq('user_id', selectedStudent.userId);
+          .eq('id', editingStudent.id);
 
-        if (error) throw error;
-      } else {
-        // Insert new
-        const { error } = await supabase
+        if (profileError) throw profileError;
+
+        // Update or insert student record
+        const { data: existingStudent } = await supabase
           .from('students')
+          .select('id')
+          .eq('user_id', editingStudent.userId)
+          .maybeSingle();
+
+        const studentData = {
+          department_id: formData.departmentId || null,
+          group_id: section?.groupId || formData.groupId || null,
+          section_id: formData.sectionId || null,
+        };
+
+        if (existingStudent) {
+          const { error } = await supabase
+            .from('students')
+            .update(studentData)
+            .eq('user_id', editingStudent.userId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('students')
+            .insert({ ...studentData, user_id: editingStudent.userId });
+          if (error) throw error;
+        }
+
+        toast({ title: 'Success', description: 'Student updated successfully' });
+      } else {
+        // Create new student - first create auth user
+        const tempPassword = `Student${Math.random().toString(36).slice(2, 10)}!`;
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: tempPassword,
+          options: {
+            data: {
+              full_name: formData.fullName,
+              user_code: formData.userCode,
+              role: 'student',
+            }
+          }
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error('Failed to create user');
+
+        // Create profile
+        const { error: profileError } = await supabase
+          .from('profiles')
           .insert({
-            user_id: selectedStudent.userId,
-            section_id: formData.sectionId || null,
-            group_id: section?.groupId || formData.groupId || null,
+            user_id: authData.user.id,
+            full_name: formData.fullName,
+            user_code: formData.userCode,
+            role: 'student',
           });
 
-        if (error) throw error;
+        if (profileError) throw profileError;
+
+        // Create user role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({
+            user_id: authData.user.id,
+            role: 'student',
+          });
+
+        if (roleError) throw roleError;
+
+        // Create student record
+        const section = sections.find(s => s.id === formData.sectionId);
+        const { error: studentError } = await supabase
+          .from('students')
+          .insert({
+            user_id: authData.user.id,
+            department_id: formData.departmentId || null,
+            group_id: section?.groupId || formData.groupId || null,
+            section_id: formData.sectionId || null,
+          });
+
+        if (studentError) throw studentError;
+
+        toast({
+          title: 'Success',
+          description: `Student created. Temporary password: ${tempPassword}`,
+        });
       }
 
-      toast({
-        title: 'Success',
-        description: 'Student section assigned successfully',
-      });
-
-      setIsEditOpen(false);
-      setSelectedStudent(null);
+      setDialogOpen(false);
+      resetForm();
       fetchData();
     } catch (error: any) {
-      console.error('Error updating student:', error);
+      console.error('Error saving student:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to update student',
+        description: error.message || 'Failed to save student',
         variant: 'destructive',
       });
     } finally {
@@ -219,13 +341,56 @@ export default function StudentsPage() {
     }
   };
 
-  const openEdit = (student: StudentProfile) => {
-    setSelectedStudent(student);
+  const handleDelete = async (student: StudentProfile) => {
+    if (!confirm(`Are you sure you want to delete "${student.fullName}"?`)) return;
+
+    try {
+      // Delete student record
+      if (student.visibleId) {
+        const { error } = await supabase
+          .from('students')
+          .delete()
+          .eq('id', student.visibleId);
+        if (error) throw error;
+      }
+
+      // Note: We don't delete the profile or auth user here
+      // as that might cause issues. Admin can do that from Supabase dashboard.
+      
+      toast({ title: 'Success', description: 'Student record deleted' });
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete student',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleEdit = (student: StudentProfile) => {
+    setEditingStudent(student);
     setFormData({
-      sectionId: student.sectionId || '',
+      fullName: student.fullName,
+      email: '',
+      userCode: student.userCode,
+      departmentId: student.departmentId || '',
       groupId: student.groupId || '',
+      sectionId: student.sectionId || '',
     });
-    setIsEditOpen(true);
+    setDialogOpen(true);
+  };
+
+  const resetForm = () => {
+    setEditingStudent(null);
+    setFormData({
+      fullName: '',
+      email: '',
+      userCode: '',
+      departmentId: '',
+      groupId: '',
+      sectionId: '',
+    });
   };
 
   const filteredStudents = students.filter(student =>
@@ -243,9 +408,151 @@ export default function StudentsPage() {
               Students Management
             </h1>
             <p className="text-muted-foreground mt-1">
-              Assign students to sections and groups
+              Register and manage students
             </p>
           </div>
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="hero">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Student
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingStudent ? 'Edit Student' : 'Register New Student'}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingStudent ? 'Update student details and assignments' : 'Add a new student with department, group, and section'}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="userCode">Student Code *</Label>
+                    <Input
+                      id="userCode"
+                      value={formData.userCode}
+                      onChange={(e) => setFormData({ ...formData, userCode: e.target.value })}
+                      placeholder="e.g., 20210123"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full Name *</Label>
+                    <Input
+                      id="fullName"
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      placeholder="e.g., Ahmed Mohamed"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {!editingStudent && (
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="e.g., student@university.edu"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department *</Label>
+                  <Select
+                    value={formData.departmentId}
+                    onValueChange={(value) => setFormData({ 
+                      ...formData, 
+                      departmentId: value,
+                      groupId: '', // Reset group when department changes
+                      sectionId: '', // Reset section
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.code} - {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="group">Group *</Label>
+                    <Select
+                      value={formData.groupId}
+                      onValueChange={(value) => setFormData({ 
+                        ...formData, 
+                        groupId: value,
+                        sectionId: '', // Reset section when group changes
+                      })}
+                      disabled={!formData.departmentId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select group" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="section">Section *</Label>
+                    <Select
+                      value={formData.sectionId}
+                      onValueChange={(value) => setFormData({ ...formData, sectionId: value })}
+                      disabled={!formData.groupId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredSections.map((section) => (
+                          <SelectItem key={section.id} value={section.id}>
+                            {section.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {editingStudent ? 'Update' : 'Register'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Card>
@@ -276,18 +583,19 @@ export default function StudentsPage() {
               </div>
             ) : filteredStudents.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No students found
+                No students found. Add your first student to get started.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User Code</TableHead>
+                      <TableHead>Student Code</TableHead>
                       <TableHead>Full Name</TableHead>
+                      <TableHead>Department</TableHead>
                       <TableHead>Group</TableHead>
                       <TableHead>Section</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -298,27 +606,44 @@ export default function StudentsPage() {
                         </TableCell>
                         <TableCell>{student.fullName}</TableCell>
                         <TableCell>
-                          {student.groupName ? (
-                            <Badge variant="outline">{student.groupName}</Badge>
+                          {student.departmentName ? (
+                            <Badge variant="outline">{student.departmentName}</Badge>
                           ) : (
-                            <span className="text-muted-foreground text-sm">Not assigned</span>
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {student.groupName ? (
+                            <Badge variant="secondary">{student.groupName}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
                           )}
                         </TableCell>
                         <TableCell>
                           {student.sectionName ? (
-                            <Badge variant="secondary">{student.sectionName}</Badge>
+                            <Badge>{student.sectionName}</Badge>
                           ) : (
-                            <span className="text-muted-foreground text-sm">Not assigned</span>
+                            <span className="text-muted-foreground text-sm">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEdit(student)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(student)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(student)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -328,51 +653,6 @@ export default function StudentsPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Edit Dialog */}
-        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Assign Section</DialogTitle>
-              <DialogDescription>
-                Assign {selectedStudent?.fullName} to a section
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Student</Label>
-                <Input value={`${selectedStudent?.userCode} - ${selectedStudent?.fullName}`} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="section">Section *</Label>
-                <Select
-                  value={formData.sectionId}
-                  onValueChange={(value) => setFormData({ ...formData, sectionId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sections.map((section) => (
-                      <SelectItem key={section.id} value={section.id}>
-                        {section.groupName} - {section.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsEditOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEdit} disabled={submitting}>
-                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );

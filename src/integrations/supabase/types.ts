@@ -146,6 +146,48 @@ export type Database = {
           },
         ]
       }
+      instructor_availability: {
+        Row: {
+          created_at: string | null
+          id: string
+          instructor_id: string
+          is_available: boolean
+          preference_level: number | null
+          time_slot_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instructor_id: string
+          is_available?: boolean
+          preference_level?: number | null
+          time_slot_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instructor_id?: string
+          is_available?: boolean
+          preference_level?: number | null
+          time_slot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instructor_availability_instructor_id_fkey"
+            columns: ["instructor_id"]
+            isOneToOne: false
+            referencedRelation: "instructors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instructor_availability_time_slot_id_fkey"
+            columns: ["time_slot_id"]
+            isOneToOne: false
+            referencedRelation: "time_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instructors: {
         Row: {
           created_at: string | null
