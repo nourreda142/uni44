@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
   { href: '/timetable', label: 'My Timetable', icon: <Calendar className="w-5 h-5" />, roles: ['staff', 'student'] },
   { href: '/my-availability', label: 'My Availability', icon: <Clock className="w-5 h-5" />, roles: ['staff'] },
   { href: '/admin/timetables', label: 'Timetables', icon: <Calendar className="w-5 h-5" />, roles: ['admin'] },
+  { href: '/admin/departments', label: 'Departments', icon: <Building2 className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/courses', label: 'Courses', icon: <BookOpen className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/instructors', label: 'Instructors', icon: <Users className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/rooms', label: 'Rooms', icon: <Building2 className="w-5 h-5" />, roles: ['admin'] },

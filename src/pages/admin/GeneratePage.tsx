@@ -28,7 +28,7 @@ import {
   Target,
   Zap,
 } from 'lucide-react';
-import { runGeneticAlgorithm, defaultGAConfig } from '@/lib/genetic-algorithm';
+import { runGeneticAlgorithm, defaultGAConfig, InstructorAvailability } from '@/lib/genetic-algorithm';
 import { Course, Section, Room, TimeSlot, Department, GAConfig, ConflictInfo } from '@/lib/types';
 
 export default function GeneratePage() {
@@ -38,6 +38,7 @@ export default function GeneratePage() {
   const [sections, setSections] = useState<Section[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [instructorAvailability, setInstructorAvailability] = useState<InstructorAvailability[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -65,10 +66,11 @@ export default function GeneratePage() {
 
   const fetchInitialData = async () => {
     try {
-      const [deptRes, roomsRes, timeSlotsRes] = await Promise.all([
+      const [deptRes, roomsRes, timeSlotsRes, availabilityRes] = await Promise.all([
         supabase.from('departments').select('*').order('name'),
         supabase.from('rooms').select('*').order('name'),
         supabase.from('time_slots').select('*').order('slot_order'),
+        supabase.from('instructor_availability').select('*'),
       ]);
 
       if (deptRes.data) {
@@ -98,6 +100,15 @@ export default function GeneratePage() {
           startTime: ts.start_time,
           endTime: ts.end_time,
           slotOrder: ts.slot_order,
+        })));
+      }
+
+      if (availabilityRes.data) {
+        setInstructorAvailability(availabilityRes.data.map(a => ({
+          instructorId: a.instructor_id,
+          timeSlotId: a.time_slot_id,
+          isAvailable: a.is_available,
+          preferenceLevel: a.preference_level || 1,
         })));
       }
     } catch (error) {
@@ -191,7 +202,8 @@ export default function GeneratePage() {
         config,
         (generation, fitness) => {
           setProgress(Math.min((generation / config.generations) * 100, 100));
-        }
+        },
+        instructorAvailability
       );
 
       setResult({
@@ -203,7 +215,7 @@ export default function GeneratePage() {
       // Save to database
       saveTimetable(gaResult);
     }, 100);
-  }, [selectedDepartment, timetableName, courses, sections, rooms, timeSlots, config]);
+  }, [selectedDepartment, timetableName, courses, sections, rooms, timeSlots, config, instructorAvailability]);
 
   const saveTimetable = async (gaResult: any) => {
     try {

@@ -10,17 +10,67 @@ export const defaultGAConfig: GAConfig = {
   tournamentSize: 5,
 };
 
+// Instructor availability type
+export interface InstructorAvailability {
+  instructorId: string;
+  timeSlotId: string;
+  isAvailable: boolean;
+  preferenceLevel: number; // 1 = available, 2 = preferred, 3 = highly preferred
+}
+
 // Random selection helper
 function randomChoice<T>(array: T[]): T {
   return array[Math.floor(Math.random() * array.length)];
 }
 
-// Generate random chromosome
+// Weighted random selection for time slots based on instructor preferences
+function selectTimeSlotForInstructor(
+  instructorId: string,
+  timeSlots: TimeSlot[],
+  availabilityMap: Map<string, InstructorAvailability>
+): TimeSlot {
+  // Get available slots for this instructor
+  const availableSlots: { slot: TimeSlot; weight: number }[] = [];
+  
+  for (const slot of timeSlots) {
+    const key = `${instructorId}_${slot.id}`;
+    const availability = availabilityMap.get(key);
+    
+    // Default to available if no preference set
+    const isAvailable = availability?.isAvailable ?? true;
+    const preferenceLevel = availability?.preferenceLevel ?? 1;
+    
+    if (isAvailable) {
+      // Weight: highly preferred = 9, preferred = 4, available = 1
+      const weight = preferenceLevel === 3 ? 9 : preferenceLevel === 2 ? 4 : 1;
+      availableSlots.push({ slot, weight });
+    }
+  }
+  
+  // If no available slots, fall back to any slot
+  if (availableSlots.length === 0) {
+    return randomChoice(timeSlots);
+  }
+  
+  // Weighted random selection
+  const totalWeight = availableSlots.reduce((sum, s) => sum + s.weight, 0);
+  let random = Math.random() * totalWeight;
+  
+  for (const { slot, weight } of availableSlots) {
+    random -= weight;
+    if (random <= 0) return slot;
+  }
+  
+  return availableSlots[availableSlots.length - 1].slot;
+}
+
+// Generate random chromosome with availability preferences
 function generateRandomChromosome(
   courses: Course[],
   sections: Section[],
   rooms: Room[],
-  timeSlots: TimeSlot[]
+  timeSlots: TimeSlot[],
+  availabilityMap: Map<string, InstructorAvailability>
 ): Chromosome {
   const genes: Gene[] = [];
 
@@ -29,12 +79,17 @@ function generateRandomChromosome(
     for (const course of courses) {
       const instructorId = course.doctorId || course.taId || '';
       
+      // Select time slot based on instructor preference
+      const timeSlot = instructorId 
+        ? selectTimeSlotForInstructor(instructorId, timeSlots, availabilityMap)
+        : randomChoice(timeSlots);
+      
       genes.push({
         courseId: course.id,
         instructorId,
         sectionId: section.id,
         roomId: randomChoice(rooms).id,
-        timeSlotId: randomChoice(timeSlots).id,
+        timeSlotId: timeSlot.id,
       });
     }
   }
@@ -87,8 +142,12 @@ function countConflicts(chromosome: Chromosome): ConflictInfo[] {
   return conflicts;
 }
 
-// Calculate fitness score
-function calculateFitness(chromosome: Chromosome, timeSlots: TimeSlot[]): number {
+// Calculate fitness score with availability preferences
+function calculateFitness(
+  chromosome: Chromosome, 
+  timeSlots: TimeSlot[],
+  availabilityMap: Map<string, InstructorAvailability>
+): number {
   const conflicts = countConflicts(chromosome);
   
   // Hard constraints: heavily penalize conflicts
@@ -96,6 +155,29 @@ function calculateFitness(chromosome: Chromosome, timeSlots: TimeSlot[]): number
 
   // Soft constraints
   const genes = chromosome.genes;
+  
+  // Availability preference bonus/penalty
+  let availabilityScore = 0;
+  for (const gene of genes) {
+    if (gene.instructorId) {
+      const key = `${gene.instructorId}_${gene.timeSlotId}`;
+      const availability = availabilityMap.get(key);
+      
+      if (availability) {
+        if (!availability.isAvailable) {
+          // Heavy penalty for unavailable slots
+          availabilityScore -= 50;
+        } else {
+          // Bonus for preferred slots
+          if (availability.preferenceLevel === 3) {
+            availabilityScore += 15; // Highly preferred
+          } else if (availability.preferenceLevel === 2) {
+            availabilityScore += 8; // Preferred
+          }
+        }
+      }
+    }
+  }
   
   // Penalize late slots (slots with order > 2)
   const lateSlotPenalty = genes.filter(gene => {
@@ -126,7 +208,7 @@ function calculateFitness(chromosome: Chromosome, timeSlots: TimeSlot[]): number
   const balanceVariance = dayValues.reduce((sum, val) => sum + Math.abs(val - avgPerDay), 0);
   const balancePenalty = balanceVariance * 2;
 
-  fitness = fitness - lateSlotPenalty + distributionBonus - balancePenalty;
+  fitness = fitness + availabilityScore - lateSlotPenalty + distributionBonus - balancePenalty;
 
   return Math.max(0, fitness);
 }
@@ -171,12 +253,13 @@ function crossover(parent1: Chromosome, parent2: Chromosome): [Chromosome, Chrom
   ];
 }
 
-// Mutation
+// Mutation with availability awareness
 function mutate(
   chromosome: Chromosome,
   mutationRate: number,
   rooms: Room[],
-  timeSlots: TimeSlot[]
+  timeSlots: TimeSlot[],
+  availabilityMap: Map<string, InstructorAvailability>
 ): Chromosome {
   const mutatedGenes = chromosome.genes.map(gene => {
     if (Math.random() < mutationRate) {
@@ -184,7 +267,11 @@ function mutate(
       if (Math.random() < 0.5) {
         return { ...gene, roomId: randomChoice(rooms).id };
       } else {
-        return { ...gene, timeSlotId: randomChoice(timeSlots).id };
+        // Use availability-aware time slot selection
+        const newTimeSlot = gene.instructorId
+          ? selectTimeSlotForInstructor(gene.instructorId, timeSlots, availabilityMap)
+          : randomChoice(timeSlots);
+        return { ...gene, timeSlotId: newTimeSlot.id };
       }
     }
     return { ...gene };
@@ -200,7 +287,8 @@ export function runGeneticAlgorithm(
   rooms: Room[],
   timeSlots: TimeSlot[],
   config: GAConfig = defaultGAConfig,
-  onProgress?: (generation: number, bestFitness: number) => void
+  onProgress?: (generation: number, bestFitness: number) => void,
+  instructorAvailability?: InstructorAvailability[]
 ): { chromosome: Chromosome; conflicts: ConflictInfo[]; generations: number } {
   
   if (courses.length === 0 || sections.length === 0 || rooms.length === 0 || timeSlots.length === 0) {
@@ -211,15 +299,24 @@ export function runGeneticAlgorithm(
     };
   }
 
+  // Build availability map for quick lookup
+  const availabilityMap = new Map<string, InstructorAvailability>();
+  if (instructorAvailability) {
+    for (const avail of instructorAvailability) {
+      const key = `${avail.instructorId}_${avail.timeSlotId}`;
+      availabilityMap.set(key, avail);
+    }
+  }
+
   // Initialize population
   let population: Chromosome[] = Array.from({ length: config.populationSize }, () =>
-    generateRandomChromosome(courses, sections, rooms, timeSlots)
+    generateRandomChromosome(courses, sections, rooms, timeSlots, availabilityMap)
   );
 
   // Calculate initial fitness
   population = population.map(chromosome => ({
     ...chromosome,
-    fitness: calculateFitness(chromosome, timeSlots),
+    fitness: calculateFitness(chromosome, timeSlots, availabilityMap),
   }));
 
   let bestChromosome = population.reduce((best, current) =>
@@ -267,12 +364,12 @@ export function runGeneticAlgorithm(
       }
 
       // Mutation
-      child1 = mutate(child1, config.mutationRate, rooms, timeSlots);
-      child2 = mutate(child2, config.mutationRate, rooms, timeSlots);
+      child1 = mutate(child1, config.mutationRate, rooms, timeSlots, availabilityMap);
+      child2 = mutate(child2, config.mutationRate, rooms, timeSlots, availabilityMap);
 
       // Calculate fitness
-      child1.fitness = calculateFitness(child1, timeSlots);
-      child2.fitness = calculateFitness(child2, timeSlots);
+      child1.fitness = calculateFitness(child1, timeSlots, availabilityMap);
+      child2.fitness = calculateFitness(child2, timeSlots, availabilityMap);
 
       newPopulation.push(child1);
       if (newPopulation.length < config.populationSize) {
