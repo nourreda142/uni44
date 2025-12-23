@@ -429,14 +429,14 @@ export default function InstructorsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="linkedUser">Link to Staff Account</Label>
                   <Select
-                    value={formData.userId}
-                    onValueChange={(value) => setFormData({ ...formData, userId: value })}
+                    value={formData.userId || "none"}
+                    onValueChange={(value) => setFormData({ ...formData, userId: value === "none" ? "" : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select staff user (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {staffUsers.map((staff) => (
                         <SelectItem key={staff.userId} value={staff.userId}>
                           {staff.userCode} - {staff.fullName}
