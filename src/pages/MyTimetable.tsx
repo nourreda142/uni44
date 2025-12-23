@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import TimetableGrid from '@/components/timetable/TimetableGrid';
+import { exportTimetableToPDF } from '@/lib/pdf-export';
 import {
   Select,
   SelectContent,
@@ -222,7 +223,18 @@ export default function MyTimetable() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                const currentTimetable = timetables.find(t => t.id === selectedTimetable);
+                exportTimetableToPDF({
+                  title: currentTimetable?.name || 'My Timetable',
+                  subtitle: user?.fullName,
+                  entries: filteredEntries,
+                });
+              }}
+              disabled={filteredEntries.length === 0}
+            >
               <FileDown className="w-4 h-4 mr-2" />
               Export PDF
             </Button>
