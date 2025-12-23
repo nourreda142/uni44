@@ -85,22 +85,29 @@ function generateRandomChromosome(
     groupsMap.get(groupId)!.push(section);
   }
 
+  // Room pools (fallback to all rooms if specific type doesn't exist)
+  const lectureRoomCandidates = rooms.filter(r => r.roomType === 'lecture_hall');
+  const lectureRooms = lectureRoomCandidates.length ? lectureRoomCandidates : rooms;
+
+  const sectionRoomCandidates = rooms.filter(
+    r => r.roomType === 'lab' || r.roomType === 'seminar_room'
+  );
+  const sectionRooms = sectionRoomCandidates.length ? sectionRoomCandidates : rooms;
+
   // For each course
   for (const course of courses) {
     // 1. Create LECTURE entries (Doctor teaches all sections in a group together)
     if (course.doctorId) {
-      for (const [groupId, groupSections] of groupsMap) {
-        // Doctor gives one lecture to all sections in the group
-        // We pick the first section as representative (all sections attend)
+      for (const [, groupSections] of groupsMap) {
         const timeSlot = selectTimeSlotForInstructor(course.doctorId, timeSlots, availabilityMap);
-        
+
         // Add one entry per section in the group (they all attend the same lecture)
         for (const section of groupSections) {
           genes.push({
             courseId: course.id,
             instructorId: course.doctorId,
             sectionId: section.id,
-            roomId: randomChoice(rooms.filter(r => r.roomType === 'lecture_hall') || rooms).id,
+            roomId: randomChoice(lectureRooms).id,
             timeSlotId: timeSlot.id,
           });
         }
@@ -111,18 +118,18 @@ function generateRandomChromosome(
     if (course.taId) {
       for (const section of sections) {
         const timeSlot = selectTimeSlotForInstructor(course.taId, timeSlots, availabilityMap);
-        
+
         genes.push({
           courseId: course.id,
           instructorId: course.taId,
           sectionId: section.id,
-          roomId: randomChoice(rooms.filter(r => r.roomType === 'lab' || r.roomType === 'seminar_room') || rooms).id,
+          roomId: randomChoice(sectionRooms).id,
           timeSlotId: timeSlot.id,
         });
       }
     }
 
-    // Fallback: if no doctor or TA, create entry with doctor or empty
+    // Fallback: if no doctor or TA, create a generic entry without instructor
     if (!course.doctorId && !course.taId) {
       for (const section of sections) {
         genes.push({
@@ -153,21 +160,29 @@ function countConflicts(chromosome: Chromosome): ConflictInfo[] {
       if (gene1.timeSlotId !== gene2.timeSlotId) continue;
 
       // Instructor conflict: same instructor, same time slot
+      // Allow a shared lecture across multiple sections (same course + same room)
       if (gene1.instructorId === gene2.instructorId && gene1.instructorId !== '') {
-        conflicts.push({
-          type: 'instructor',
-          description: 'Instructor teaching two lectures at the same time',
-          genes: [gene1, gene2],
-        });
+        const sameSharedSession = gene1.courseId === gene2.courseId && gene1.roomId === gene2.roomId;
+        if (!sameSharedSession) {
+          conflicts.push({
+            type: 'instructor',
+            description: 'Instructor teaching two lectures at the same time',
+            genes: [gene1, gene2],
+          });
+        }
       }
 
       // Room conflict: same room, same time slot
+      // Allow a shared lecture across multiple sections (same course + same instructor)
       if (gene1.roomId === gene2.roomId) {
-        conflicts.push({
-          type: 'room',
-          description: 'Two lectures scheduled in the same room at the same time',
-          genes: [gene1, gene2],
-        });
+        const sameSharedSession = gene1.courseId === gene2.courseId && gene1.instructorId === gene2.instructorId;
+        if (!sameSharedSession) {
+          conflicts.push({
+            type: 'room',
+            description: 'Two lectures scheduled in the same room at the same time',
+            genes: [gene1, gene2],
+          });
+        }
       }
 
       // Section conflict: same section, same time slot

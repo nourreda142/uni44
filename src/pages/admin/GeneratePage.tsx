@@ -194,26 +194,36 @@ export default function GeneratePage() {
 
     // Run GA with progress callback
     setTimeout(() => {
-      const gaResult = runGeneticAlgorithm(
-        courses,
-        sections,
-        rooms,
-        timeSlots,
-        config,
-        (generation, fitness) => {
-          setProgress(Math.min((generation / config.generations) * 100, 100));
-        },
-        instructorAvailability
-      );
+      try {
+        const gaResult = runGeneticAlgorithm(
+          courses,
+          sections,
+          rooms,
+          timeSlots,
+          config,
+          (generation, fitness) => {
+            setProgress(Math.min((generation / config.generations) * 100, 100));
+          },
+          instructorAvailability
+        );
 
-      setResult({
-        fitness: gaResult.chromosome.fitness,
-        conflicts: gaResult.conflicts,
-        generations: gaResult.generations,
-      });
+        setResult({
+          fitness: gaResult.chromosome.fitness,
+          conflicts: gaResult.conflicts,
+          generations: gaResult.generations,
+        });
 
-      // Save to database
-      saveTimetable(gaResult);
+        // Save to database
+        saveTimetable(gaResult);
+      } catch (error: any) {
+        console.error('Error generating timetable:', error);
+        toast({
+          title: 'Error',
+          description: error?.message || 'Failed to generate timetable',
+          variant: 'destructive',
+        });
+        setGenerating(false);
+      }
     }, 100);
   }, [selectedDepartment, timetableName, courses, sections, rooms, timeSlots, config, instructorAvailability]);
 
