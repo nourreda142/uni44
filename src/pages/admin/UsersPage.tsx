@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ import {
   Shield,
   GraduationCap,
   UserCog,
+  Building2,
 } from 'lucide-react';
 
 interface UserProfile {
@@ -63,39 +65,95 @@ interface UserProfile {
   createdAt: string;
 }
 
+interface StudentAssignment {
+  id: string;
+  visibleId: string;
+  userId: string;
+  userCode: string;
+  fullName: string;
+  sectionId: string | null;
+  groupId: string | null;
+  departmentId: string | null;
+  sectionName?: string;
+  groupName?: string;
+  departmentName?: string;
+}
+
+interface Section {
+  id: string;
+  name: string;
+  groupId: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  departmentId: string;
+}
+
+interface Department {
+  id: string;
+  name: string;
+  code: string;
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [students, setStudents] = useState<StudentAssignment[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<StudentAssignment | null>(null);
   const [formData, setFormData] = useState({
     userCode: '',
     fullName: '',
     password: '',
     role: 'student' as 'admin' | 'staff' | 'student',
   });
+  const [assignmentData, setAssignmentData] = useState({
+    departmentId: '',
+    groupId: '',
+    sectionId: '',
+  });
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchUsers();
+    fetchData();
   }, []);
 
-  const fetchUsers = async () => {
+  // Filter groups based on selected department
+  const filteredGroups = assignmentData.departmentId
+    ? groups.filter(g => g.departmentId === assignmentData.departmentId)
+    : groups;
+
+  // Filter sections based on selected group
+  const filteredSections = assignmentData.groupId
+    ? sections.filter(s => s.groupId === assignmentData.groupId)
+    : [];
+
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch users
+      const { data: usersData, error: usersError } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (usersError) throw usersError;
 
-      if (data) {
-        setUsers(data.map(u => ({
+      if (usersData) {
+        setUsers(usersData.map(u => ({
           id: u.id,
           userId: u.user_id,
           userCode: u.user_code,
@@ -104,11 +162,93 @@ export default function UsersPage() {
           createdAt: u.created_at || '',
         })));
       }
+
+      // Fetch departments
+      const { data: departmentsData } = await supabase
+        .from('departments')
+        .select('*')
+        .order('name');
+
+      if (departmentsData) {
+        setDepartments(departmentsData.map(d => ({
+          id: d.id,
+          name: d.name,
+          code: d.code,
+        })));
+      }
+
+      // Fetch groups
+      const { data: groupsData } = await supabase
+        .from('groups')
+        .select('*')
+        .order('name');
+
+      if (groupsData) {
+        setGroups(groupsData.map(g => ({
+          id: g.id,
+          name: g.name,
+          departmentId: g.department_id,
+        })));
+      }
+
+      // Fetch sections
+      const { data: sectionsData } = await supabase
+        .from('sections')
+        .select('*')
+        .order('name');
+
+      if (sectionsData) {
+        setSections(sectionsData.map(s => ({
+          id: s.id,
+          name: s.name,
+          groupId: s.group_id,
+        })));
+      }
+
+      // Fetch student profiles with assignments
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'student')
+        .order('full_name');
+
+      const { data: studentsData } = await supabase
+        .from('students')
+        .select(`
+          *,
+          section:sections(id, name, group_id, group:groups(id, name, department_id)),
+          group:groups(id, name, department_id),
+          department:departments(id, name, code)
+        `);
+
+      if (profilesData) {
+        const studentMap = new Map();
+        studentsData?.forEach(s => {
+          studentMap.set(s.user_id, s);
+        });
+
+        setStudents(profilesData.map(p => {
+          const studentRecord = studentMap.get(p.user_id);
+          return {
+            id: p.id,
+            visibleId: studentRecord?.id || '',
+            userId: p.user_id,
+            userCode: p.user_code,
+            fullName: p.full_name,
+            sectionId: studentRecord?.section_id || null,
+            groupId: studentRecord?.group_id || null,
+            departmentId: studentRecord?.department_id || null,
+            sectionName: studentRecord?.section?.name,
+            groupName: studentRecord?.section?.group?.name || studentRecord?.group?.name,
+            departmentName: studentRecord?.department?.name,
+          };
+        }));
+      }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching data:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load users',
+        description: 'Failed to load data',
         variant: 'destructive',
       });
     } finally {
@@ -128,7 +268,6 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
-      // Create auth user
       const email = `${formData.userCode.toLowerCase()}@bsnu.edu`;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -141,7 +280,6 @@ export default function UsersPage() {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Failed to create user');
 
-      // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
@@ -153,7 +291,6 @@ export default function UsersPage() {
 
       if (profileError) throw profileError;
 
-      // Create user_roles entry
       const { error: roleError } = await supabase
         .from('user_roles')
         .insert({
@@ -163,6 +300,15 @@ export default function UsersPage() {
 
       if (roleError) throw roleError;
 
+      // If creating a student, also create student record
+      if (formData.role === 'student') {
+        await supabase
+          .from('students')
+          .insert({
+            user_id: authData.user.id,
+          });
+      }
+
       toast({
         title: 'Success',
         description: `User ${formData.fullName} created successfully`,
@@ -170,7 +316,7 @@ export default function UsersPage() {
 
       setIsCreateOpen(false);
       setFormData({ userCode: '', fullName: '', password: '', role: 'student' });
-      fetchUsers();
+      fetchData();
     } catch (error: any) {
       console.error('Error creating user:', error);
       toast({
@@ -195,7 +341,6 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
-      // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
@@ -206,7 +351,6 @@ export default function UsersPage() {
 
       if (profileError) throw profileError;
 
-      // Update user_roles
       const { error: roleError } = await supabase
         .from('user_roles')
         .update({ role: formData.role })
@@ -221,7 +365,7 @@ export default function UsersPage() {
 
       setIsEditOpen(false);
       setSelectedUser(null);
-      fetchUsers();
+      fetchData();
     } catch (error: any) {
       console.error('Error updating user:', error);
       toast({
@@ -235,19 +379,10 @@ export default function UsersPage() {
   };
 
   const handleResetPassword = async () => {
-    if (!selectedUser || !formData.password.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a new password',
-        variant: 'destructive',
-      });
-      return;
-    }
+    if (!selectedUser) return;
 
     setSubmitting(true);
     try {
-      // Note: This requires admin privileges via service role
-      // For now, we'll show a message that password reset emails are sent
       const email = `${selectedUser.userCode.toLowerCase()}@bsnu.edu`;
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -263,7 +398,6 @@ export default function UsersPage() {
 
       setIsResetOpen(false);
       setSelectedUser(null);
-      setFormData({ ...formData, password: '' });
     } catch (error: any) {
       console.error('Error resetting password:', error);
       toast({
@@ -281,19 +415,25 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
-      // Delete profile (this will cascade to related records)
-      const { error } = await supabase
-        .from('profiles')
+      // Delete student record if exists
+      await supabase
+        .from('students')
         .delete()
-        .eq('id', selectedUser.id);
-
-      if (error) throw error;
+        .eq('user_id', selectedUser.userId);
 
       // Delete user_roles
       await supabase
         .from('user_roles')
         .delete()
         .eq('user_id', selectedUser.userId);
+
+      // Delete profile
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', selectedUser.id);
+
+      if (error) throw error;
 
       toast({
         title: 'Success',
@@ -302,12 +442,60 @@ export default function UsersPage() {
 
       setIsDeleteOpen(false);
       setSelectedUser(null);
-      fetchUsers();
+      fetchData();
     } catch (error: any) {
       console.error('Error deleting user:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to delete user',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveAssignment = async () => {
+    if (!selectedStudent) return;
+
+    setSubmitting(true);
+    try {
+      const section = sections.find(s => s.id === assignmentData.sectionId);
+      const studentData = {
+        department_id: assignmentData.departmentId || null,
+        group_id: section?.groupId || assignmentData.groupId || null,
+        section_id: assignmentData.sectionId || null,
+      };
+
+      // Check if student record exists
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id')
+        .eq('user_id', selectedStudent.userId)
+        .maybeSingle();
+
+      if (existingStudent) {
+        const { error } = await supabase
+          .from('students')
+          .update(studentData)
+          .eq('user_id', selectedStudent.userId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('students')
+          .insert({ ...studentData, user_id: selectedStudent.userId });
+        if (error) throw error;
+      }
+
+      toast({ title: 'Success', description: 'Student assignment updated' });
+      setIsAssignOpen(false);
+      setSelectedStudent(null);
+      fetchData();
+    } catch (error: any) {
+      console.error('Error saving assignment:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save assignment',
         variant: 'destructive',
       });
     } finally {
@@ -328,7 +516,6 @@ export default function UsersPage() {
 
   const openResetPassword = (user: UserProfile) => {
     setSelectedUser(user);
-    setFormData({ ...formData, password: '' });
     setIsResetOpen(true);
   };
 
@@ -337,9 +524,24 @@ export default function UsersPage() {
     setIsDeleteOpen(true);
   };
 
+  const openAssign = (student: StudentAssignment) => {
+    setSelectedStudent(student);
+    setAssignmentData({
+      departmentId: student.departmentId || '',
+      groupId: student.groupId || '',
+      sectionId: student.sectionId || '',
+    });
+    setIsAssignOpen(true);
+  };
+
   const filteredUsers = users.filter(user =>
     user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.userCode.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredStudents = students.filter(student =>
+    student.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+    student.userCode.toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
   const getRoleBadge = (role: string) => {
@@ -365,7 +567,7 @@ export default function UsersPage() {
               Users Management
             </h1>
             <p className="text-muted-foreground mt-1">
-              Manage user accounts and permissions
+              Manage user accounts, permissions, and student assignments
             </p>
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -444,92 +646,200 @@ export default function UsersPage() {
           </Dialog>
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle>All Users</CardTitle>
-                <CardDescription>{users.length} users total</CardDescription>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search users..."
-                  className="pl-9 w-full sm:w-[250px]"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : filteredUsers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No users found
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User Code</TableHead>
-                      <TableHead>Full Name</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-mono font-medium">
-                          {user.userCode}
-                        </TableCell>
-                        <TableCell>{user.fullName}</TableCell>
-                        <TableCell>{getRoleBadge(user.role)}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {new Date(user.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEdit(user)}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openResetPassword(user)}
-                            >
-                              <Key className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => openDelete(user)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <Tabs defaultValue="all-users" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="all-users" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              All Users ({users.length})
+            </TabsTrigger>
+            <TabsTrigger value="student-assignments" className="flex items-center gap-2">
+              <GraduationCap className="w-4 h-4" />
+              Student Assignments ({students.length})
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Edit Dialog */}
+          <TabsContent value="all-users">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <CardTitle>All Users</CardTitle>
+                    <CardDescription>{filteredUsers.length} users</CardDescription>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search users..."
+                      className="pl-9 w-full sm:w-[250px]"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                ) : filteredUsers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No users found
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User Code</TableHead>
+                          <TableHead>Full Name</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredUsers.map((user) => (
+                          <TableRow key={user.id}>
+                            <TableCell className="font-mono font-medium">
+                              {user.userCode}
+                            </TableCell>
+                            <TableCell>{user.fullName}</TableCell>
+                            <TableCell>{getRoleBadge(user.role)}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(user.createdAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEdit(user)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openResetPassword(user)}
+                                >
+                                  <Key className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => openDelete(user)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="student-assignments">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-primary" />
+                      Student Assignments
+                    </CardTitle>
+                    <CardDescription>
+                      Assign students to departments, groups, and sections
+                    </CardDescription>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search students..."
+                      className="pl-9 w-full sm:w-[250px]"
+                      value={studentSearchQuery}
+                      onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                ) : filteredStudents.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No students found. Create student users first.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Student Code</TableHead>
+                          <TableHead>Full Name</TableHead>
+                          <TableHead>Department</TableHead>
+                          <TableHead>Group</TableHead>
+                          <TableHead>Section</TableHead>
+                          <TableHead className="w-[80px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredStudents.map((student) => (
+                          <TableRow key={student.id}>
+                            <TableCell className="font-mono font-medium">
+                              {student.userCode}
+                            </TableCell>
+                            <TableCell>{student.fullName}</TableCell>
+                            <TableCell>
+                              {student.departmentName ? (
+                                <Badge variant="outline">{student.departmentName}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {student.groupName ? (
+                                <Badge variant="secondary">{student.groupName}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {student.sectionName ? (
+                                <Badge>{student.sectionName}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openAssign(student)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Edit User Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <DialogContent>
             <DialogHeader>
@@ -601,6 +911,96 @@ export default function UsersPage() {
               <Button onClick={handleResetPassword} disabled={submitting}>
                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Send Reset Email
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Student Assignment Dialog */}
+        <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Assign Student</DialogTitle>
+              <DialogDescription>
+                Assign {selectedStudent?.fullName} to department, group, and section
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <Select
+                  value={assignmentData.departmentId}
+                  onValueChange={(value) => setAssignmentData({
+                    departmentId: value,
+                    groupId: '',
+                    sectionId: '',
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.code} - {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Group</Label>
+                <Select
+                  value={assignmentData.groupId}
+                  onValueChange={(value) => setAssignmentData({
+                    ...assignmentData,
+                    groupId: value,
+                    sectionId: '',
+                  })}
+                  disabled={!assignmentData.departmentId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Section</Label>
+                <Select
+                  value={assignmentData.sectionId}
+                  onValueChange={(value) => setAssignmentData({
+                    ...assignmentData,
+                    sectionId: value,
+                  })}
+                  disabled={!assignmentData.groupId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredSections.map((section) => (
+                      <SelectItem key={section.id} value={section.id}>
+                        {section.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAssignOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveAssignment} disabled={submitting}>
+                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Save Assignment
               </Button>
             </DialogFooter>
           </DialogContent>

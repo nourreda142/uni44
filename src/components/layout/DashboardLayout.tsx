@@ -52,7 +52,6 @@ const navItems: NavItem[] = [
   { href: '/admin/timeslots', label: 'Time Slots', icon: <Clock className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/generate', label: 'Generate', icon: <Sparkles className="w-5 h-5" />, roles: ['admin'] },
   { href: '/admin/users', label: 'Users', icon: <Shield className="w-5 h-5" />, roles: ['admin'] },
-  { href: '/admin/students', label: 'Students', icon: <GraduationCap className="w-5 h-5" />, roles: ['admin'] },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
