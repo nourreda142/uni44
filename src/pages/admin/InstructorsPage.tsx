@@ -33,16 +33,25 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { Instructor, Department } from '@/lib/types';
 
+interface StaffUser {
+  id: string;
+  userId: string;
+  userCode: string;
+  fullName: string;
+}
+
 interface InstructorFormData {
   fullName: string;
   title: string;
   instructorType: 'doctor' | 'teaching_assistant';
   departmentId: string;
+  userId: string;
 }
 
 export default function InstructorsPage() {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingInstructor, setEditingInstructor] = useState<Instructor | null>(null);
@@ -51,6 +60,7 @@ export default function InstructorsPage() {
     title: 'Dr.',
     instructorType: 'doctor',
     departmentId: '',
+    userId: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
@@ -62,9 +72,10 @@ export default function InstructorsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [instructorsRes, departmentsRes] = await Promise.all([
+      const [instructorsRes, departmentsRes, staffRes] = await Promise.all([
         supabase.from('instructors').select('*').order('full_name'),
         supabase.from('departments').select('*').order('name'),
+        supabase.from('profiles').select('*').eq('role', 'staff').order('full_name'),
       ]);
 
       if (instructorsRes.data) {
@@ -83,6 +94,15 @@ export default function InstructorsPage() {
           id: d.id,
           name: d.name,
           code: d.code,
+        })));
+      }
+
+      if (staffRes.data) {
+        setStaffUsers(staffRes.data.map(s => ({
+          id: s.id,
+          userId: s.user_id,
+          userCode: s.user_code,
+          fullName: s.full_name,
         })));
       }
     } catch (error) {
@@ -107,6 +127,7 @@ export default function InstructorsPage() {
         title: formData.title,
         instructor_type: formData.instructorType,
         department_id: formData.departmentId || null,
+        user_id: formData.userId || null,
       };
 
       if (editingInstructor) {
@@ -168,6 +189,7 @@ export default function InstructorsPage() {
       title: instructor.title,
       instructorType: instructor.instructorType,
       departmentId: instructor.departmentId || '',
+      userId: instructor.userId || '',
     });
     setDialogOpen(true);
   };
@@ -179,6 +201,7 @@ export default function InstructorsPage() {
       title: 'Dr.',
       instructorType: 'doctor',
       departmentId: departments[0]?.id || '',
+      userId: '',
     });
   };
 
@@ -274,6 +297,28 @@ export default function InstructorsPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="linkedUser">Link to Staff Account</Label>
+                  <Select
+                    value={formData.userId}
+                    onValueChange={(value) => setFormData({ ...formData, userId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select staff user (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      {staffUsers.map((staff) => (
+                        <SelectItem key={staff.userId} value={staff.userId}>
+                          {staff.userCode} - {staff.fullName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Link this instructor to a staff user account to enable timetable viewing
+                  </p>
                 </div>
                 <div className="flex justify-end gap-3 pt-4">
                   <Button

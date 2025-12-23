@@ -16,6 +16,7 @@ import GeneratePage from "./pages/admin/GeneratePage";
 import TimetablesPage from "./pages/admin/TimetablesPage";
 import TimetableViewPage from "./pages/admin/TimetableViewPage";
 import UsersPage from "./pages/admin/UsersPage";
+import StudentsPage from "./pages/admin/StudentsPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -125,6 +126,11 @@ function AppRoutes() {
       <Route path="/admin/users" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <UsersPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/students" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <StudentsPage />
         </ProtectedRoute>
       } />
       
