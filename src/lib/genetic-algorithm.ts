@@ -2,12 +2,12 @@ import { Gene, Chromosome, GAConfig, ConflictInfo, Course, Instructor, Section, 
 
 // Default GA configuration
 export const defaultGAConfig: GAConfig = {
-  populationSize: 100,
-  generations: 500,
-  mutationRate: 0.1,
+  populationSize: 50,
+  generations: 100,
+  mutationRate: 0.15,
   crossoverRate: 0.8,
-  elitismCount: 5,
-  tournamentSize: 5,
+  elitismCount: 3,
+  tournamentSize: 3,
 };
 
 // Instructor availability type
