@@ -118,7 +118,7 @@ export default function TimetableGrid({ entries, filterSection, filterInstructor
                             )}
                             {entry.section && (
                               <div className="truncate text-[10px] opacity-70">
-                                👥 {entry.section.group?.name} - {entry.section.name}
+                                👥 {entry.section.group?.name ? `${entry.section.group.name} - ` : ''}{entry.section.name}
                               </div>
                             )}
                           </div>
