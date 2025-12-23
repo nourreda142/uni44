@@ -86,20 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (userCode: string, password: string) => {
     try {
-      // First, find the user by their user_code
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('user_id')
-        .eq('user_code', userCode)
-        .single();
-
-      if (profileError || !profile) {
-        return { error: new Error('Invalid user ID or password') };
-      }
-
-      // Get the email from auth.users via a function or use userCode as email pattern
-      // Since we can't query auth.users directly, we'll use a pattern: usercode@university.edu
-      const email = `${userCode.toLowerCase()}@bsnu.edu`;
+      const normalizedUserCode = userCode.trim();
+      const email = `${normalizedUserCode.toLowerCase()}@bsnu.edu`;
 
       const { error } = await supabase.auth.signInWithPassword({
         email,
