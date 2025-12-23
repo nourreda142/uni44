@@ -289,14 +289,14 @@ export default function CoursesPage() {
                 <div className="space-y-2">
                   <Label htmlFor="doctor">Doctor (Lecturer)</Label>
                   <Select
-                    value={formData.doctorId}
-                    onValueChange={(value) => setFormData({ ...formData, doctorId: value })}
+                    value={formData.doctorId || "none"}
+                    onValueChange={(value) => setFormData({ ...formData, doctorId: value === "none" ? "" : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select doctor" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {doctors.map((doc) => (
                         <SelectItem key={doc.id} value={doc.id}>
                           {doc.title} {doc.fullName}
@@ -308,14 +308,14 @@ export default function CoursesPage() {
                 <div className="space-y-2">
                   <Label htmlFor="ta">Teaching Assistant</Label>
                   <Select
-                    value={formData.taId}
-                    onValueChange={(value) => setFormData({ ...formData, taId: value })}
+                    value={formData.taId || "none"}
+                    onValueChange={(value) => setFormData({ ...formData, taId: value === "none" ? "" : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select teaching assistant" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {tas.map((ta) => (
                         <SelectItem key={ta.id} value={ta.id}>
                           {ta.fullName}
