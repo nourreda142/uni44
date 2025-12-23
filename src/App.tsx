@@ -15,6 +15,7 @@ import TimeSlotsPage from "./pages/admin/TimeSlotsPage";
 import GeneratePage from "./pages/admin/GeneratePage";
 import TimetablesPage from "./pages/admin/TimetablesPage";
 import TimetableViewPage from "./pages/admin/TimetableViewPage";
+import UsersPage from "./pages/admin/UsersPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -119,6 +120,11 @@ function AppRoutes() {
       <Route path="/admin/timetables/:id" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <TimetableViewPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/users" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <UsersPage />
         </ProtectedRoute>
       } />
       
