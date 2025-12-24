@@ -32,6 +32,7 @@ export default function MyTimetable() {
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentSection, setStudentSection] = useState<Section | null>(null);
+  const [groupSectionIds, setGroupSectionIds] = useState<string[]>([]);
   const [instructorId, setInstructorId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -80,22 +81,37 @@ export default function MyTimetable() {
           .from('students')
           .select(`
             *,
-            section:sections(*, group:groups(*))
+            section:sections(*, group:groups(*)),
+            group:groups(*)
           `)
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (studentData?.section) {
-          setStudentSection({
-            id: studentData.section.id,
-            name: studentData.section.name,
-            groupId: studentData.section.group_id,
-            group: studentData.section.group ? {
-              id: studentData.section.group.id,
-              name: studentData.section.group.name,
-              departmentId: studentData.section.group.department_id,
-            } : undefined,
-          });
+        if (studentData) {
+          // Get all sections in the student's group to show group lectures
+          if (studentData.group_id) {
+            const { data: groupSections } = await supabase
+              .from('sections')
+              .select('id')
+              .eq('group_id', studentData.group_id);
+            
+            if (groupSections) {
+              setGroupSectionIds(groupSections.map(s => s.id));
+            }
+          }
+
+          if (studentData.section) {
+            setStudentSection({
+              id: studentData.section.id,
+              name: studentData.section.name,
+              groupId: studentData.section.group_id,
+              group: studentData.section.group ? {
+                id: studentData.section.group.id,
+                name: studentData.section.group.name,
+                departmentId: studentData.section.group.department_id,
+              } : undefined,
+            });
+          }
         }
       }
 
@@ -190,7 +206,7 @@ export default function MyTimetable() {
 
   // Filter entries based on user role
   const filteredEntries = user?.role === 'student' && studentSection
-    ? entries.filter(e => e.sectionId === studentSection.id)
+    ? entries.filter(e => e.sectionId === studentSection.id || groupSectionIds.includes(e.sectionId))
     : user?.role === 'staff' && instructorId
     ? entries.filter(e => e.instructorId === instructorId)
     : entries;
