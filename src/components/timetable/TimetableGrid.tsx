@@ -12,7 +12,7 @@ const TIME_SLOTS = [
 
 interface TimetableGridProps {
   entries: TimetableEntry[];
-  filterSection?: string;
+  filterSections?: string[]; // Array of section IDs to show (for students - includes group sections)
   filterInstructor?: string;
 }
 
@@ -27,7 +27,7 @@ const COLORS = [
   'bg-pink-100 border-pink-300 text-pink-900',
 ];
 
-export default function TimetableGrid({ entries, filterSection, filterInstructor }: TimetableGridProps) {
+export default function TimetableGrid({ entries, filterSections, filterInstructor }: TimetableGridProps) {
   // Create a map of courseId to color
   const courseColors = useMemo(() => {
     const colors = new Map<string, string>();
@@ -41,14 +41,14 @@ export default function TimetableGrid({ entries, filterSection, filterInstructor
   // Filter entries if needed
   const filteredEntries = useMemo(() => {
     let result = entries;
-    if (filterSection) {
-      result = result.filter(e => e.sectionId === filterSection);
+    if (filterSections && filterSections.length > 0) {
+      result = result.filter(e => filterSections.includes(e.sectionId));
     }
     if (filterInstructor) {
       result = result.filter(e => e.instructorId === filterInstructor);
     }
     return result;
-  }, [entries, filterSection, filterInstructor]);
+  }, [entries, filterSections, filterInstructor]);
 
   // Group entries by day and time slot
   const getEntriesForCell = (day: string, timeSlot: typeof TIME_SLOTS[0]) => {
