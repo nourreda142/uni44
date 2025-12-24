@@ -51,31 +51,9 @@ export default function MyTimetable() {
 
     setLoading(true);
     try {
-      // Fetch approved timetables
-      const { data: timetablesData } = await supabase
-        .from('timetables')
-        .select('*')
-        .eq('is_approved', true)
-        .order('created_at', { ascending: false });
+      let userDepartmentId: string | null = null;
 
-      if (timetablesData) {
-        setTimetables(timetablesData.map(t => ({
-          id: t.id,
-          name: t.name,
-          departmentId: t.department_id,
-          fitnessScore: t.fitness_score ? parseFloat(String(t.fitness_score)) : undefined,
-          generationCount: t.generation_count || 0,
-          isApproved: t.is_approved || false,
-          createdBy: t.created_by,
-          createdAt: t.created_at,
-        })));
-
-        if (timetablesData.length > 0) {
-          setSelectedTimetable(timetablesData[0].id);
-        }
-      }
-
-      // If student, fetch their section
+      // If student, fetch their section and department first
       if (user.role === 'student') {
         const { data: studentData } = await supabase
           .from('students')
@@ -88,8 +66,19 @@ export default function MyTimetable() {
           .maybeSingle();
 
         if (studentData) {
-          // Get all sections in the student's group to show group lectures
+          // Get department ID from student's group
           if (studentData.group_id) {
+            const { data: groupData } = await supabase
+              .from('groups')
+              .select('department_id')
+              .eq('id', studentData.group_id)
+              .maybeSingle();
+            
+            if (groupData) {
+              userDepartmentId = groupData.department_id;
+            }
+
+            // Get all sections in the student's group to show group lectures
             const { data: groupSections } = await supabase
               .from('sections')
               .select('id')
@@ -115,7 +104,7 @@ export default function MyTimetable() {
         }
       }
 
-      // If staff, fetch their instructor record
+      // If staff, fetch their instructor record and department
       if (user.role === 'staff') {
         const { data: instructorData } = await supabase
           .from('instructors')
@@ -125,8 +114,41 @@ export default function MyTimetable() {
 
         if (instructorData) {
           setInstructorId(instructorData.id);
+          userDepartmentId = instructorData.department_id;
         }
       }
+
+      // Fetch approved timetables - filter by department for students/staff
+      let timetablesQuery = supabase
+        .from('timetables')
+        .select('*')
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false });
+
+      // Filter by department if user has one
+      if (userDepartmentId && (user.role === 'student' || user.role === 'staff')) {
+        timetablesQuery = timetablesQuery.eq('department_id', userDepartmentId);
+      }
+
+      const { data: timetablesData } = await timetablesQuery;
+
+      if (timetablesData) {
+        setTimetables(timetablesData.map(t => ({
+          id: t.id,
+          name: t.name,
+          departmentId: t.department_id,
+          fitnessScore: t.fitness_score ? parseFloat(String(t.fitness_score)) : undefined,
+          generationCount: t.generation_count || 0,
+          isApproved: t.is_approved || false,
+          createdBy: t.created_by,
+          createdAt: t.created_at,
+        })));
+
+        if (timetablesData.length > 0) {
+          setSelectedTimetable(timetablesData[0].id);
+        }
+      }
+
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -354,7 +376,7 @@ export default function MyTimetable() {
               ) : (
                 <TimetableGrid 
                   entries={entries} 
-                  filterSection={user?.role === 'student' ? studentSection?.id : undefined}
+                  filterSections={user?.role === 'student' && groupSectionIds.length > 0 ? groupSectionIds : undefined}
                   filterInstructor={user?.role === 'staff' ? instructorId || undefined : undefined}
                 />
               )}
