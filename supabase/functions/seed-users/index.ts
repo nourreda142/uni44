@@ -17,66 +17,81 @@ interface UserData {
   sectionName?: string;
 }
 
-const users: UserData[] = [
-  // Admin
-  {
-    email: 'qw1290@bsnu.edu',
-    password: 'po1234',
-    userCode: 'QW1290',
-    fullName: 'Admin User',
-    role: 'admin',
-  },
-  // Instructors
-  {
-    email: 'hh1234@bsnu.edu',
-    password: '123456',
-    userCode: 'hh1234',
-    fullName: 'Dr. Heba Hamdy',
-    role: 'staff',
-    instructorType: 'doctor',
-    departmentCode: 'AI',
-  },
-  {
-    email: 'ag1234@bsnu.edu',
-    password: '098765',
-    userCode: 'ag1234',
-    fullName: 'Dr. Asmaa Goda',
-    role: 'staff',
-    instructorType: 'ta',
-    departmentCode: 'AI',
-  },
-  // Students
-  {
-    email: 'nr2345@bsnu.edu',
-    password: '142019',
-    userCode: 'nr2345',
-    fullName: 'Nour Reda Ramadan',
-    role: 'student',
-    departmentCode: 'AI',
-    groupName: 'G2',
-    sectionName: 'Sec4',
-  },
-  {
-    email: 'ms1234@bsnu.edu',
-    password: '204192',
-    userCode: 'ms1234',
-    fullName: 'Mahmoud Sayed Radi',
-    role: 'student',
-    departmentCode: 'AI',
-    groupName: 'G2',
-    sectionName: 'Sec3',
-  },
-  {
-    email: 'ad2345@bsnu.edu',
-    password: '199192',
-    userCode: 'ad2345',
-    fullName: 'Adham Ahmed Sabry',
-    role: 'student',
-    departmentCode: 'AI',
-    groupName: 'G1',
-    sectionName: 'Sec1',
-  },
-];
+// Generate secure random password
+function generateSecurePassword(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+  let password = '';
+  const randomValues = new Uint8Array(12);
+  crypto.getRandomValues(randomValues);
+  for (let i = 0; i < 12; i++) {
+    password += chars[randomValues[i] % chars.length];
+  }
+  return password;
+}
+
+// Demo user definitions - passwords are generated at runtime
+function getDemoUsers(): UserData[] {
+  return [
+    // Admin
+    {
+      email: 'qw1290@bsnu.edu',
+      password: generateSecurePassword(),
+      userCode: 'QW1290',
+      fullName: 'Admin User',
+      role: 'admin',
+    },
+    // Instructors
+    {
+      email: 'hh1234@bsnu.edu',
+      password: generateSecurePassword(),
+      userCode: 'hh1234',
+      fullName: 'Dr. Heba Hamdy',
+      role: 'staff',
+      instructorType: 'doctor',
+      departmentCode: 'AI',
+    },
+    {
+      email: 'ag1234@bsnu.edu',
+      password: generateSecurePassword(),
+      userCode: 'ag1234',
+      fullName: 'Dr. Asmaa Goda',
+      role: 'staff',
+      instructorType: 'ta',
+      departmentCode: 'AI',
+    },
+    // Students
+    {
+      email: 'nr2345@bsnu.edu',
+      password: generateSecurePassword(),
+      userCode: 'nr2345',
+      fullName: 'Nour Reda Ramadan',
+      role: 'student',
+      departmentCode: 'AI',
+      groupName: 'G2',
+      sectionName: 'Sec4',
+    },
+    {
+      email: 'ms1234@bsnu.edu',
+      password: generateSecurePassword(),
+      userCode: 'ms1234',
+      fullName: 'Mahmoud Sayed Radi',
+      role: 'student',
+      departmentCode: 'AI',
+      groupName: 'G2',
+      sectionName: 'Sec3',
+    },
+    {
+      email: 'ad2345@bsnu.edu',
+      password: generateSecurePassword(),
+      userCode: 'ad2345',
+      fullName: 'Adham Ahmed Sabry',
+      role: 'student',
+      departmentCode: 'AI',
+      groupName: 'G1',
+      sectionName: 'Sec1',
+    },
+  ];
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -87,6 +102,16 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    
+    // Check if running in production - disable seeding in production
+    const environment = Deno.env.get('ENVIRONMENT') || 'development';
+    if (environment === 'production') {
+      console.log('Seed function disabled in production environment');
+      return new Response(
+        JSON.stringify({ error: 'Seed function is disabled in production for security' }), 
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     // Create admin client for user creation
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -140,6 +165,9 @@ Deno.serve(async (req) => {
 
     console.log('Admin authenticated:', user.email);
 
+    // Generate users with random passwords at runtime
+    const users = getDemoUsers();
+
     // Idempotency check - prevent re-seeding if demo users already exist
     const { data: existingProfiles } = await supabaseAdmin
       .from('profiles')
@@ -157,7 +185,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const results: { user: string; status: string; error?: string }[] = [];
+    const results: { user: string; status: string; error?: string; generatedPassword?: string }[] = [];
 
     // Fetch departments, groups, and sections for linking
     const { data: departments } = await supabaseAdmin.from('departments').select('id, code');
@@ -255,14 +283,23 @@ Deno.serve(async (req) => {
           }
         }
 
-        results.push({ user: userData.fullName, status: 'success' });
+        // Include generated password in response for admin to share with users
+        results.push({ 
+          user: userData.fullName, 
+          status: 'success',
+          generatedPassword: userData.password // Only returned to admin who created the users
+        });
       } catch (err) {
         console.error(`Error creating user ${userData.fullName}:`, err);
         results.push({ user: userData.fullName, status: 'failed', error: String(err) });
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      results,
+      note: 'Save the generated passwords securely - they cannot be retrieved later!'
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

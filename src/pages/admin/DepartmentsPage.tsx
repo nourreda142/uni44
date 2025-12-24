@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { departmentSchema, groupSchema, sectionSchema, validateForm } from '@/lib/validation-schemas';
 import {
   Dialog,
   DialogContent,
@@ -134,46 +135,74 @@ export default function DepartmentsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate based on entity type
+    let validationError: string | null = null;
+    let validatedData: { name: string; code?: string; departmentId?: string; groupId?: string } | null = null;
+    
+    if (entityType === 'department') {
+      const result = validateForm(departmentSchema, { name: formData.name, code: formData.code });
+      validationError = result.error;
+      if (result.data) validatedData = { name: result.data.name, code: result.data.code };
+    } else if (entityType === 'group') {
+      const result = validateForm(groupSchema, { name: formData.name, departmentId: formData.departmentId });
+      validationError = result.error;
+      if (result.data) validatedData = { name: result.data.name, departmentId: result.data.departmentId };
+    } else {
+      const result = validateForm(sectionSchema, { name: formData.name, groupId: formData.groupId });
+      validationError = result.error;
+      if (result.data) validatedData = { name: result.data.name, groupId: result.data.groupId };
+    }
+
+    if (validationError || !validatedData) {
+      toast({
+        title: 'Validation Error',
+        description: validationError || 'Invalid data',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      if (entityType === 'department') {
+      if (entityType === 'department' && validatedData.code) {
         if (editingId) {
           const { error } = await supabase
             .from('departments')
-            .update({ name: formData.name, code: formData.code })
+            .update({ name: validatedData.name, code: validatedData.code.toUpperCase() })
             .eq('id', editingId);
           if (error) throw error;
         } else {
           const { error } = await supabase
             .from('departments')
-            .insert({ name: formData.name, code: formData.code });
+            .insert({ name: validatedData.name, code: validatedData.code.toUpperCase() });
           if (error) throw error;
         }
-      } else if (entityType === 'group') {
+      } else if (entityType === 'group' && validatedData.departmentId) {
         if (editingId) {
           const { error } = await supabase
             .from('groups')
-            .update({ name: formData.name, department_id: formData.departmentId })
+            .update({ name: validatedData.name, department_id: validatedData.departmentId })
             .eq('id', editingId);
           if (error) throw error;
         } else {
           const { error } = await supabase
             .from('groups')
-            .insert({ name: formData.name, department_id: formData.departmentId });
+            .insert({ name: validatedData.name, department_id: validatedData.departmentId });
           if (error) throw error;
         }
-      } else if (entityType === 'section') {
+      } else if (entityType === 'section' && validatedData.groupId) {
         if (editingId) {
           const { error } = await supabase
             .from('sections')
-            .update({ name: formData.name, group_id: formData.groupId })
+            .update({ name: validatedData.name, group_id: validatedData.groupId })
             .eq('id', editingId);
           if (error) throw error;
         } else {
           const { error } = await supabase
             .from('sections')
-            .insert({ name: formData.name, group_id: formData.groupId });
+            .insert({ name: validatedData.name, group_id: validatedData.groupId });
           if (error) throw error;
         }
       }
