@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { userCreateSchema, userUpdateSchema, validateForm } from '@/lib/validation-schemas';
 import {
   Dialog,
   DialogContent,
@@ -257,10 +258,12 @@ export default function UsersPage() {
   };
 
   const handleCreate = async () => {
-    if (!formData.userCode.trim() || !formData.fullName.trim() || !formData.password.trim()) {
+    // Validate form data
+    const validation = validateForm(userCreateSchema, formData);
+    if (validation.error) {
       toast({
-        title: 'Error',
-        description: 'Please fill all required fields',
+        title: 'Validation Error',
+        description: validation.error,
         variant: 'destructive',
       });
       return;
@@ -268,7 +271,7 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
-      const email = `${formData.userCode.toLowerCase()}@bsnu.edu`;
+      const email = `${validation.data.userCode.toLowerCase()}@bsnu.edu`;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password: formData.password,
@@ -330,10 +333,17 @@ export default function UsersPage() {
   };
 
   const handleEdit = async () => {
-    if (!selectedUser || !formData.fullName.trim()) {
+    if (!selectedUser) return;
+
+    // Validate form data
+    const validation = validateForm(userUpdateSchema, {
+      fullName: formData.fullName,
+      role: formData.role,
+    });
+    if (validation.error) {
       toast({
-        title: 'Error',
-        description: 'Please fill all required fields',
+        title: 'Validation Error',
+        description: validation.error,
         variant: 'destructive',
       });
       return;
@@ -344,8 +354,8 @@ export default function UsersPage() {
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
-          full_name: formData.fullName,
-          role: formData.role,
+          full_name: validation.data.fullName,
+          role: validation.data.role,
         })
         .eq('id', selectedUser.id);
 

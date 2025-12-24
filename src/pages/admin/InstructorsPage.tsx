@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { instructorSchema, validateForm } from '@/lib/validation-schemas';
 import {
   Dialog,
   DialogContent,
@@ -152,15 +153,27 @@ export default function InstructorsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate form data
+    const validation = validateForm(instructorSchema, formData);
+    if (validation.error) {
+      toast({
+        title: 'Validation Error',
+        description: validation.error,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       const instructorData = {
-        full_name: formData.fullName,
-        title: formData.title,
-        instructor_type: formData.instructorType,
-        department_id: formData.departmentId || null,
-        user_id: formData.userId || null,
+        full_name: validation.data.fullName,
+        title: validation.data.title,
+        instructor_type: validation.data.instructorType,
+        department_id: validation.data.departmentId || null,
+        user_id: validation.data.userId || null,
       };
 
       if (editingInstructor) {
