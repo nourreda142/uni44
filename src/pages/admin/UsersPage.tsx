@@ -64,7 +64,7 @@ interface UserProfile {
   userCode: string;
   fullName: string;
   role: 'admin' | 'staff' | 'student';
-  createdAt: string;
+  createdAt: string | null;
 }
 
 interface StudentAssignment {
@@ -161,7 +161,7 @@ export default function UsersPage() {
           userCode: u.user_code,
           fullName: u.full_name,
           role: u.role as 'admin' | 'staff' | 'student',
-          createdAt: u.created_at || '',
+          createdAt: u.created_at ?? null,
         })));
       }
 
@@ -583,6 +583,13 @@ export default function UsersPage() {
     student.userCode.toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return '—';
+    const ms = Date.parse(date);
+    if (Number.isNaN(ms)) return '—';
+    return new Date(ms).toLocaleDateString();
+  };
+
   const getRoleBadge = (role: string) => {
     switch (role) {
       case 'admin':
@@ -746,7 +753,7 @@ export default function UsersPage() {
                             <TableCell>{user.fullName}</TableCell>
                             <TableCell>{getRoleBadge(user.role)}</TableCell>
                             <TableCell className="text-muted-foreground">
-                              {new Date(user.createdAt).toLocaleDateString()}
+                              {formatDate(user.createdAt)}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
