@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -282,17 +282,17 @@ export default function UsersPage() {
     try {
       // Get session to ensure we have valid auth
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (sessionError || !sessionData.session) {
         throw new Error('You must be logged in to create users');
       }
-      
-      // Call edge function to create user (uses admin API)
+
+      // Call backend function to create user (uses admin API)
       const response = await supabase.functions.invoke('create-user', {
         body: {
           userCode: validation.data.userCode,
           fullName: validation.data.fullName,
-          password: formData.password,
+          password: validation.data.password,
           role: validation.data.role,
         },
         headers: {
@@ -300,7 +300,16 @@ export default function UsersPage() {
         },
       });
 
+      // Improve error visibility from backend (important for debugging)
       if (response.error) {
+        console.error('create-user invoke error:', response.error);
+
+        // If backend returned a non-2xx with JSON body, surface it
+        if (response.error instanceof FunctionsHttpError) {
+          const body = await response.error.context.json().catch(() => null);
+          throw new Error(body?.error || body?.message || response.error.message || 'Failed to create user');
+        }
+
         throw new Error(response.error.message || 'Failed to create user');
       }
 
@@ -310,7 +319,7 @@ export default function UsersPage() {
 
       toast({
         title: 'Success',
-        description: response.data?.message || `User ${formData.fullName} created successfully`,
+        description: response.data?.message || `User ${validation.data.fullName} created successfully`,
       });
 
       setIsCreateOpen(false);
