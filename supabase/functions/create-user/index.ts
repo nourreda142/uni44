@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
 
   try {
     // Get the authorization header to verify admin
-    const authHeader = req.headers.get('Authorization');
+    const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization');
     if (!authHeader) {
       return json(401, { error: 'Missing authorization header' });
     }
@@ -59,16 +59,15 @@ Deno.serve(async (req) => {
       return json(500, { error: 'Backend misconfigured' });
     }
 
-    // Create client with user's token to verify they're logged in
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : authHeader;
 
-    // Get current user
+    // Create a client using anon key and validate the incoming JWT explicitly
+    const userClient = createClient(supabaseUrl, supabaseAnonKey);
+
     const {
       data: { user: currentUser },
       error: userError,
-    } = await userClient.auth.getUser();
+    } = await userClient.auth.getUser(jwt);
 
     if (userError || !currentUser) {
       console.warn(`[${requestId}] Unauthorized user`, { userError });
