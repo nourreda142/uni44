@@ -230,6 +230,15 @@ export default function UsersPage() {
 
         setStudents(profilesData.map(p => {
           const studentRecord = studentMap.get(p.user_id);
+          
+          // Get the correct groupId - either from the student record or from the section
+          const sectionGroupId = studentRecord?.section?.group_id;
+          const groupId = studentRecord?.group_id || sectionGroupId || null;
+          
+          // Get the correct departmentId - either from the student record or from the group
+          const groupDeptId = studentRecord?.section?.group?.department_id || studentRecord?.group?.department_id;
+          const departmentId = studentRecord?.department_id || groupDeptId || null;
+          
           return {
             id: p.id,
             visibleId: studentRecord?.id || '',
@@ -237,8 +246,8 @@ export default function UsersPage() {
             userCode: p.user_code,
             fullName: p.full_name,
             sectionId: studentRecord?.section_id || null,
-            groupId: studentRecord?.group_id || null,
-            departmentId: studentRecord?.department_id || null,
+            groupId,
+            departmentId,
             sectionName: studentRecord?.section?.name,
             groupName: studentRecord?.section?.group?.name || studentRecord?.group?.name,
             departmentName: studentRecord?.department?.name,
@@ -457,9 +466,13 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
+      // Get the section to derive the group
       const section = sections.find(s => s.id === assignmentData.sectionId);
+      // Get the group to derive the department
+      const group = groups.find(g => g.id === (section?.groupId || assignmentData.groupId));
+      
       const studentData = {
-        department_id: assignmentData.departmentId || null,
+        department_id: group?.departmentId || assignmentData.departmentId || null,
         group_id: section?.groupId || assignmentData.groupId || null,
         section_id: assignmentData.sectionId || null,
       };
@@ -523,9 +536,28 @@ export default function UsersPage() {
 
   const openAssign = (student: StudentAssignment) => {
     setSelectedStudent(student);
+    
+    // Get the correct groupId from section if available
+    let groupId = student.groupId || '';
+    if (student.sectionId) {
+      const section = sections.find(s => s.id === student.sectionId);
+      if (section) {
+        groupId = section.groupId;
+      }
+    }
+    
+    // Get the correct departmentId from group if available
+    let departmentId = student.departmentId || '';
+    if (groupId && !departmentId) {
+      const group = groups.find(g => g.id === groupId);
+      if (group) {
+        departmentId = group.departmentId;
+      }
+    }
+    
     setAssignmentData({
-      departmentId: student.departmentId || '',
-      groupId: student.groupId || '',
+      departmentId,
+      groupId,
       sectionId: student.sectionId || '',
     });
     setIsAssignOpen(true);
