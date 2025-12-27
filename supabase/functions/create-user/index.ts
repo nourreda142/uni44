@@ -17,6 +17,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log('create-user invoked');
+
   try {
     // Get the authorization header to verify admin
     const authHeader = req.headers.get('Authorization');
@@ -167,21 +169,6 @@ Deno.serve(async (req) => {
 
       if (studentError) {
         console.error('Student record error:', studentError);
-      }
-    }
-
-    // If staff, create instructor record
-    if (role === 'staff') {
-      const { error: instructorError } = await adminClient
-        .from('instructors')
-        .insert({
-          user_id: authData.user.id,
-          full_name: fullName,
-          instructor_type: 'teaching_assistant',
-        });
-
-      if (instructorError) {
-        console.error('Instructor record error:', instructorError);
       }
     }
 
