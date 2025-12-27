@@ -89,7 +89,7 @@ export interface Timetable {
   generationCount: number;
   isApproved: boolean;
   createdBy?: string;
-  createdAt: string;
+  createdAt: string | null;
 }
 
 export interface TimetableEntry {
