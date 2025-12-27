@@ -279,10 +279,17 @@ export default function UsersPage() {
       return;
     }
 
+    const requestId = `create_user_${Date.now()}`;
+    console.log(`[${requestId}] create user click`, {
+      userCode: validation.data.userCode,
+      role: validation.data.role,
+    });
+
     setSubmitting(true);
     try {
       // Get session to ensure we have valid auth
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      console.log(`[${requestId}] session`, { hasSession: !!sessionData.session, sessionError });
 
       if (sessionError || !sessionData.session) {
         throw new Error('You must be logged in to create users');
@@ -298,12 +305,18 @@ export default function UsersPage() {
         },
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
+          'x-request-id': requestId,
         },
+      });
+
+      console.log(`[${requestId}] invoke finished`, {
+        hasData: !!response.data,
+        hasError: !!response.error,
       });
 
       // Improve error visibility from backend (important for debugging)
       if (response.error) {
-        console.error('create-user invoke error:', response.error);
+        console.error(`[${requestId}] create-user invoke error:`, response.error);
 
         // If backend returned a non-2xx with JSON body, surface it
         if (response.error instanceof FunctionsHttpError) {
@@ -327,7 +340,7 @@ export default function UsersPage() {
       setFormData({ userCode: '', fullName: '', password: '', role: 'student' });
       fetchData();
     } catch (error: any) {
-      console.error('Error creating user:', error);
+      console.error(`[${requestId}] Error creating user:`, error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to create user',
