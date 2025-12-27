@@ -271,15 +271,23 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
-      // Call edge function to create user (uses admin API)
-      const { data: sessionData } = await supabase.auth.getSession();
+      // Get session to ensure we have valid auth
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
+      if (sessionError || !sessionData.session) {
+        throw new Error('You must be logged in to create users');
+      }
+      
+      // Call edge function to create user (uses admin API)
       const response = await supabase.functions.invoke('create-user', {
         body: {
           userCode: validation.data.userCode,
           fullName: validation.data.fullName,
           password: formData.password,
           role: validation.data.role,
+        },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
         },
       });
 
