@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { TimetableEntry } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -75,8 +75,8 @@ export default function TimetableGrid({ entries, filterSections, filterInstructo
 
           {/* Time Slot Rows */}
           {TIME_SLOTS.map((slot) => (
-            <>
-              <div key={`time-${slot.start}`} className="timetable-time">
+            <React.Fragment key={`slot-${slot.start}`}>
+              <div className="timetable-time">
                 {slot.label}
               </div>
               {DAYS.map(day => {
@@ -129,7 +129,7 @@ export default function TimetableGrid({ entries, filterSections, filterInstructo
                   </div>
                 );
               })}
-            </>
+            </React.Fragment>
           ))}
         </div>
       </div>

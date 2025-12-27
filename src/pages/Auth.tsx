@@ -150,7 +150,7 @@ export default function Auth() {
 
         {/* Footer */}
         <p className="text-center text-primary-foreground/50 text-xs mt-6 animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          © 2024 Beni-Suef National University. All rights reserved.
+          © {new Date().getFullYear()} Beni-Suef National University. All rights reserved.
         </p>
       </div>
     </div>
