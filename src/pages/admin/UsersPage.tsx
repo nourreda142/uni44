@@ -271,50 +271,29 @@ export default function UsersPage() {
 
     setSubmitting(true);
     try {
-      const email = `${validation.data.userCode.toLowerCase()}@bsnu.edu`;
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: window.location.origin,
+      // Call edge function to create user (uses admin API)
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      const response = await supabase.functions.invoke('create-user', {
+        body: {
+          userCode: validation.data.userCode,
+          fullName: validation.data.fullName,
+          password: formData.password,
+          role: validation.data.role,
         },
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to create user');
+      }
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          user_id: authData.user.id,
-          user_code: formData.userCode.toUpperCase(),
-          full_name: formData.fullName,
-          role: formData.role,
-        });
-
-      if (profileError) throw profileError;
-
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: authData.user.id,
-          role: formData.role,
-        });
-
-      if (roleError) throw roleError;
-
-      // If creating a student, also create student record
-      if (formData.role === 'student') {
-        await supabase
-          .from('students')
-          .insert({
-            user_id: authData.user.id,
-          });
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
       toast({
         title: 'Success',
-        description: `User ${formData.fullName} created successfully`,
+        description: response.data?.message || `User ${formData.fullName} created successfully`,
       });
 
       setIsCreateOpen(false);
